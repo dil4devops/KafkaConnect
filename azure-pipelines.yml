@@ -15,7 +15,7 @@ steps:
     displayName: 'Kakfa Connector Creation'
     inputs:
      gitHubConnection:
-      rootFolderOrFile:'$(Build.SourcesDirectory)'
+      repositoryName:'$(Build.Repository.Name)'
       filePath:'$(Build.SourcesDirectory)/providerdata-azure-blob-connector.json'
       releaseNotes:'Kafka Connector Creation'
        
