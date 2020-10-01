@@ -1,0 +1,32 @@
+{
+  "schema.ignore": "true",
+  "value.converter.schemas.enable": "false",
+  "schemas.enable": "false",
+  "name": "providersource1",
+  "connector.class": "io.confluent.connect.azure.blob.AzureBlobStorageSinkConnector",
+  "tasks.max": "1",
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "topics": [
+    "providersource"
+  ],
+  "format.class": "io.confluent.connect.azure.storage.format.json.JsonFormat",
+  "flush.size": "1000",
+  "rotate.interval.ms": "1000",
+  "rotate.schedule.interval.ms": "1000",
+  "schema.compatibility": "NONE",
+  "azblob.account.name": "stizdldataqa",
+  "azblob.account.key": "****************************************************************************************",
+  "azblob.container.name": "izdl-kafka-connect-qa",
+  "storage.class": "io.confluent.connect.azure.blob.storage.AzureBlobStorage",
+  "partitioner.class": "io.confluent.connect.storage.partitioner.TimeBasedPartitioner",
+  "partition.duration.ms": "60000",
+  "path.format": "'year'=YYYY/'month'=MM/'day'=dd/",
+  "locale": "en-US",
+  "timezone": "America/New_York",
+  "timestamp.extractor": "Record",
+  "timestamp.field": "",
+  "confluent.topic.bootstrap.servers": [
+    "iz-kafka-cp-kafka-headless:9092"
+  ]
+}
