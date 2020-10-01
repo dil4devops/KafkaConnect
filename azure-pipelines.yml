@@ -11,7 +11,6 @@ pool:
 
 steps:
   - task: GitHubRelease@0
-    
     displayName: 'Kakfa Connector Creation'
     inputs:
      gitHubConnection:
