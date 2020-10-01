@@ -11,9 +11,10 @@ pool:
 
 steps:
   - task: GitHubRelease@0
-    repositoryName: '$(Build.Repository.Name)'
+    
     displayName: 'Kakfa Connector Creation'
     inputs:
-      targetType: filePath
+     gitHubConnection:
+      rootFolderOrFile: '$(Build.SourcesDirectory)'
       filePath: './providerdata-azure-blob-connector.json'
-      releaseNotes: Kafka Connector Creation
+      releaseNotes: 'Kafka Connector Creation'
