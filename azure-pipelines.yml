@@ -15,6 +15,7 @@ steps:
     inputs:
      gitHubConnection:
       repositoryName:'$(Build.Repository.Name)'
-      filePath:'$(Build.Repository.Name)/providerdata-azure-blob-connector.json'
+      contents:'*.json'
+      filePath:'$(Build.Repository.Name)/run-s3.sh'
       releaseNotes:'Kafka Connector Creation'
        
