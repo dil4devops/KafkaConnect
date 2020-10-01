@@ -11,9 +11,10 @@ pool:
 
 steps:
   - task: GitHubRelease@0
+    repositoryName: '$(Build.Repository.Name)'
     displayName: 'Kakfa Connector Creation'
     inputs:
-      SourceFolder: deployment
-      Contents: 'providerdata-azure-blob-connector.json'
-      TargetFolder: '$(build.artifactstagingdirectory)'
+      targetType: filePath
+      filePath: './providerdata-azure-blob-connector.json'
+      workingDirectory: test/Microsoft.Azure.WebJobs.Extensions.Kafka.EndToEndTests
       releaseNotes: Kafka Connector Creation
