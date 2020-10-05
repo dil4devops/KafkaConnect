@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: game-demo
+data:
+    app_ackeventtopic: "ackevent"
+    app_ingesteventtopic: "ingestevent"
