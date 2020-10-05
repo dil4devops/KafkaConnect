@@ -1,3 +1,6 @@
+#!/bin/sh
+# configmap for custom key value paris
+
 kubectl apply -f aa-data-api-configmap.yml
 kubectl apply -f aa-elasticsearch-client-configmap.yml
 kubectl apply -f aa-file-router-configmap.yml
