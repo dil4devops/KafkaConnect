@@ -1,0 +1,237 @@
+
+	 
+pre-stop-hook-script.sh:	"#!/usr/bin/env bash
+set -eux
+# This script will wait for up to $PRE_STOP_MAX_WAIT_SECONDS for $POD_IP to disappear from DNS record,
+# then it will wait additional $PRE_STOP_ADDITIONAL_WAIT_SECONDS and exit. This slows down the process shutdown
+# and allows to make changes to the pool gracefully, without blackholing traffic when DNS
+# contains IP that is already inactive. Assumes $HEADLESS_SERVICE_NAME and $POD_IP env variables are defined.
+
+# Max time to wait for pods IP to disappear from DNS.
+# As this runs in parallel to grace period after which process is SIGKILLed,
+# it should be set to allow enough time for the process to gracefully terminate.
+PRE_STOP_MAX_WAIT_SECONDS=${PRE_STOP_MAX_WAIT_SECONDS:=20}
+
+# Additional wait before shutting down Elasticsearch.
+# It allows kube-proxy to refresh its rules and remove the terminating Pod IP.
+# Kube-proxy refresh period defaults to every 30 seconds, but the operation itself can take much longer if
+# using iptables with a lot of services, in which case the default 30sec might not be enough.
+# Also gives some additional bonus time to in-flight requests to terminate, and new requests to still
+# target the Pod IP before Elasticsearch stops.
+PRE_STOP_ADDITIONAL_WAIT_SECONDS=${PRE_STOP_ADDITIONAL_WAIT_SECONDS:=30}
+
+START_TIME=$(date +%s)
+while true; do
+ELAPSED_TIME=$(($(date +%s) - $START_TIME))
+
+if [ $ELAPSED_TIME -gt $PRE_STOP_MAX_WAIT_SECONDS ]; then
+exit 1
+fi
+
+if ! getent hosts $HEADLESS_SERVICE_NAME | grep $POD_IP; then
+sleep $PRE_STOP_ADDITIONAL_WAIT_SECONDS
+exit 0
+fi
+
+sleep 1
+done"
+ 	
+prepare-fs.sh:		"#!/usr/bin/env bash
+set -eu
+
+# the operator only works with the default ES distribution
+license=/usr/share/elasticsearch/LICENSE.txt
+if [[ ! -f $license || $(grep -Fxc "ELASTIC LICENSE AGREEMENT" $license) -ne 1 ]]; then
+>&2 echo "unsupported_distribution"
+exit 42
+fi
+
+# compute time in seconds since the given start time
+function duration() {
+local start=$1
+end=$(date +%s)
+echo $((end-start))
+}
+
+######################
+# START #
+######################
+
+script_start=$(date +%s)
+
+echo "Starting init script"
+
+######################
+# Config linking #
+######################
+
+# Link individual files from their mount location into the config dir
+# to a volume, to be used by the ES container
+ln_start=$(date +%s)
+
+echo "Linking /mnt/elastic-internal/xpack-file-realm/users to /usr/share/elasticsearch/config/users"
+ln -sf /mnt/elastic-internal/xpack-file-realm/users /usr/share/elasticsearch/config/users
+
+echo "Linking /mnt/elastic-internal/xpack-file-realm/roles.yml to /usr/share/elasticsearch/config/roles.yml"
+ln -sf /mnt/elastic-internal/xpack-file-realm/roles.yml /usr/share/elasticsearch/config/roles.yml
+
+echo "Linking /mnt/elastic-internal/xpack-file-realm/users_roles to /usr/share/elasticsearch/config/users_roles"
+ln -sf /mnt/elastic-internal/xpack-file-realm/users_roles /usr/share/elasticsearch/config/users_roles
+
+echo "Linking /mnt/elastic-internal/elasticsearch-config/elasticsearch.yml to /usr/share/elasticsearch/config/elasticsearch.yml"
+ln -sf /mnt/elastic-internal/elasticsearch-config/elasticsearch.yml /usr/share/elasticsearch/config/elasticsearch.yml
+
+echo "Linking /mnt/elastic-internal/unicast-hosts/unicast_hosts.txt to /usr/share/elasticsearch/config/unicast_hosts.txt"
+ln -sf /mnt/elastic-internal/unicast-hosts/unicast_hosts.txt /usr/share/elasticsearch/config/unicast_hosts.txt
+
+echo "File linking duration: $(duration $ln_start) sec."
+
+
+######################
+# Files persistence #
+######################
+
+# Persist the content of bin/, config/ and plugins/ to a volume,
+# so installed plugins files can to be used by the ES container
+mv_start=$(date +%s)
+
+if [[ -z "$(ls -A /usr/share/elasticsearch/config)" ]]; then
+echo "Empty dir /usr/share/elasticsearch/config"
+else
+echo "Copying /usr/share/elasticsearch/config/* to /mnt/elastic-internal/elasticsearch-config-local/"
+cp -av /usr/share/elasticsearch/config/* /mnt/elastic-internal/elasticsearch-config-local/
+fi
+
+if [[ -z "$(ls -A /usr/share/elasticsearch/plugins)" ]]; then
+echo "Empty dir /usr/share/elasticsearch/plugins"
+else
+echo "Copying /usr/share/elasticsearch/plugins/* to /mnt/elastic-internal/elasticsearch-plugins-local/"
+cp -av /usr/share/elasticsearch/plugins/* /mnt/elastic-internal/elasticsearch-plugins-local/
+fi
+
+if [[ -z "$(ls -A /usr/share/elasticsearch/bin)" ]]; then
+echo "Empty dir /usr/share/elasticsearch/bin"
+else
+echo "Copying /usr/share/elasticsearch/bin/* to /mnt/elastic-internal/elasticsearch-bin-local/"
+cp -av /usr/share/elasticsearch/bin/* /mnt/elastic-internal/elasticsearch-bin-local/
+fi
+
+echo "Files copy duration: $(duration $mv_start) sec."
+
+######################
+# Volumes chown #
+######################
+
+# chown the data and logs volume to the elasticsearch user
+# only done when running as root, other cases should be handled
+# with a proper security context
+chown_start=$(date +%s)
+if [[ $EUID -eq 0 ]]; then
+
+echo "chowning /usr/share/elasticsearch/data to elasticsearch:elasticsearch"
+chown -v elasticsearch:elasticsearch /usr/share/elasticsearch/data
+
+echo "chowning /usr/share/elasticsearch/logs to elasticsearch:elasticsearch"
+chown -v elasticsearch:elasticsearch /usr/share/elasticsearch/logs
+
+fi
+echo "chown duration: $(duration $chown_start) sec."
+
+######################
+# Wait for certs #
+######################
+
+INIT_CONTAINER_LOCAL_KEY_PATH=/mnt/elastic-internal/transport-certificates/${POD_NAME}.tls.key
+
+# wait for the transport certificates to show up
+echo "waiting for the transport certificates (${INIT_CONTAINER_LOCAL_KEY_PATH})"
+wait_start=$(date +%s)
+while [ ! -f ${INIT_CONTAINER_LOCAL_KEY_PATH} ]
+do
+sleep 0.2
+done
+echo "wait duration: $(duration wait_start) sec."
+
+######################
+# Certs linking #
+######################
+
+KEY_SOURCE_PATH=/usr/share/elasticsearch/config/transport-certs/${POD_NAME}.tls.key
+KEY_TARGET_PATH=/mnt/elastic-internal/elasticsearch-config-local/node-transport-cert/transport.tls.key
+
+CERT_SOURCE_PATH=/usr/share/elasticsearch/config/transport-certs/${POD_NAME}.tls.crt
+CERT_TARGET_PATH=/mnt/elastic-internal/elasticsearch-config-local/node-transport-cert/transport.tls.crt
+
+# Link individual files from their mount location into the config dir
+# to a volume, to be used by the ES container
+ln_start=$(date +%s)
+
+echo "Linking $CERT_SOURCE_PATH to $CERT_TARGET_PATH"
+mkdir -p $(dirname $KEY_TARGET_PATH)
+ln -sf $KEY_SOURCE_PATH $KEY_TARGET_PATH
+echo "Linking $CERT_SOURCE_PATH to $CERT_TARGET_PATH"
+mkdir -p $(dirname $CERT_TARGET_PATH)
+ln -sf $CERT_SOURCE_PATH $CERT_TARGET_PATH
+
+echo "Certs linking duration: $(duration $ln_start) sec."
+
+######################
+# End #
+######################
+
+echo "Init script successful"
+echo "Script duration: $(duration $script_start) sec.""
+ 	
+readiness-probe-script.sh:		"#!/usr/bin/env bash
+
+# fail should be called as a last resort to help the user to understand why the probe failed
+function fail {
+timestamp=$(date --iso-8601=seconds)
+echo "{\"timestamp\": \"${timestamp}\", \"message\": \"readiness probe failed\", "$1"}" | tee /proc/1/fd/2 2> /dev/null
+exit 1
+}
+
+labels="/mnt/elastic-internal/downward-api/labels"
+
+version=""
+if [[ -f "${labels}" ]]; then
+# get Elasticsearch version from the downward API
+version=$(grep "elasticsearch.k8s.elastic.co/version" ${labels} | cut -d '=' -f 2)
+# remove quotes
+version=$(echo "${version}" | tr -d '"')
+fi
+
+READINESS_PROBE_TIMEOUT=${READINESS_PROBE_TIMEOUT:=3}
+
+# Check if PROBE_PASSWORD_PATH is set, otherwise fall back to its former name in 1.0.0.beta-1: PROBE_PASSWORD_FILE
+if [[ -z "${PROBE_PASSWORD_PATH}" ]]; then
+probe_password_path="${PROBE_PASSWORD_FILE}"
+else
+probe_password_path="${PROBE_PASSWORD_PATH}"
+fi
+
+# setup basic auth if credentials are available
+if [ -n "${PROBE_USERNAME}" ] && [ -f "${probe_password_path}" ]; then
+PROBE_PASSWORD=$(<${probe_password_path})
+BASIC_AUTH="-u ${PROBE_USERNAME}:${PROBE_PASSWORD}"
+else
+BASIC_AUTH=''
+fi
+
+# request Elasticsearch on /
+ENDPOINT="${READINESS_PROBE_PROTOCOL:-https}://127.0.0.1:9200/"
+status=$(curl -o /dev/null -w "%{http_code}" --max-time ${READINESS_PROBE_TIMEOUT} -XGET -s -k ${BASIC_AUTH} $ENDPOINT)
+curl_rc=$?
+
+if [[ ${curl_rc} -ne 0 ]]; then
+fail "\"curl_rc\": \"${curl_rc}\""
+fi
+
+# ready if status code 200, 503 is tolerable if ES version is 6.x
+if [[ ${status} == "200" ]] || [[ ${status} == "503" && ${version:0:2} == "6." ]]; then
+exit 0
+else
+fail " \"status\": \"${status}\", \"version\":\"${version}\" "
+fi"
+
+unicast_hosts.txt: "10.244.5.143:9300"
