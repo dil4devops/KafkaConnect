@@ -5,3 +5,18 @@ metadata:
 data:
     app_ackeventtopic: "ackevent"
     app_ingesteventtopic: "ingestevent"
+    DISABLE_S2S_TOKEN: "true"
+    ELASTIC_CLUSTER_NAME: "elasticsearch"
+    ELASTIC_HOST: "elasticsearch-es-http"
+    ELASTIC_PORT: "9200"
+    ENVIRONMENT: "SSL"
+    HL7_DLQ_INDEX: "hl7dlq"
+    HL7_REDACTED_INDEX:	"hl7redacted"
+    HL7_VALIDATION_INDEX: "hl7validation"
+    KEYSTORE_PASSWORD: "password"
+    KEYSTORE_PATH: "/etc/scripts/keystore.jks"
+    PROVIDER_DLQ_RECORD_INDEX: "providerdlqrecord"
+    PROVIDER_FILE_PROCESS_INDEX: "providerfileprocess"
+    PROVIDER_VALIDATION_INDEX: "providervalidation"
+    management.health.elasticsearch.enabled: "false"
+
