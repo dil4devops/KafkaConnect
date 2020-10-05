@@ -3,5 +3,5 @@ kind: ConfigMap
 metadata:
     name: game-demo
 data:
-        app_ackeventtopic: "ackevent"
-        app_ingesteventtopic: "ingestevent"
+    app_ackeventtopic: "ackevent"
+    app_ingesteventtopic: "ingestevent"
